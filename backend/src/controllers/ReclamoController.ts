@@ -37,4 +37,13 @@ export class ReclamoController {
       next(err);
     }
   };
+
+  actualizar: RequestHandler<{ folio: string }> = async (req, res, next) => {
+    try {
+      const autor = req.user?.usuario ?? 'operador';
+      res.json(toReclamoDto(await this.service.actualizar(req.params.folio, req.body, autor)));
+    } catch (err) {
+      next(err);
+    }
+  };
 }
