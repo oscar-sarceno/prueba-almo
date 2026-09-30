@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import { createDocsRouter } from './docs';
 import { AuthController } from './controllers/AuthController';
 import { ReclamoController } from './controllers/ReclamoController';
 import { errorHandler } from './middlewares/errorHandler';
@@ -19,7 +20,12 @@ export const createApp = ({ reclamoService, authService }: AppDeps) => {
   const app = express();
 
   app.disable('x-powered-by');
-  app.use(helmet());
+  // Sin upgrade-insecure-requests para que Swagger UI funcione al servirse por http (local/Docker).
+  app.use(
+    helmet({
+      contentSecurityPolicy: { useDefaults: true, directives: { upgradeInsecureRequests: null } },
+    }),
+  );
   app.use(cors());
   app.use(express.json({ limit: '10kb' }));
 
@@ -27,6 +33,7 @@ export const createApp = ({ reclamoService, authService }: AppDeps) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
+  app.use('/api/docs', createDocsRouter());
   app.use('/api/auth', createAuthRouter(new AuthController(authService)));
   app.use('/api/reclamos', createReclamosRouter(new ReclamoController(reclamoService), authService));
 

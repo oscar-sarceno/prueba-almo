@@ -1,0 +1,156 @@
+{
+  "info": {
+    "name": "API de Reclamos por Incidencias en Envíos",
+    "description": "Flujo sugerido: 1) Crear reclamo (guarda {{folio}}), 2) Consultar, 3) Login operador (guarda {{token}}), 4) Actualizar reclamo.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "folio", "value": "REC-20260902-B2C3D4" },
+    { "key": "token", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Crear reclamo (POST)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('201 Created', () => pm.response.to.have.status(201));",
+              "const body = pm.response.json();",
+              "pm.test('devuelve folio y estado Recibido', () => {",
+              "  pm.expect(body.folio).to.match(/^REC-\\d{8}-[A-F0-9]{6}$/);",
+              "  pm.expect(body.estado).to.eql('Recibido');",
+              "});",
+              "pm.collectionVariables.set('folio', body.folio);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/reclamos",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"numeroGuia\": \"GU100000777\",\n  \"tipoIncidencia\": \"Paquete Dañado\",\n  \"descripcion\": \"La caja llegó aplastada y el producto interior está roto.\"\n}"
+        }
+      }
+    },
+    {
+      "name": "1b. Crear reclamo - tipo inválido (400)",
+      "event": [
+        {
+          "listen": "test",
+          "script": { "type": "text/javascript", "exec": ["pm.test('400 Bad Request', () => pm.response.to.have.status(400));"] }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/reclamos",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"numeroGuia\": \"GU100000777\",\n  \"tipoIncidencia\": \"Robo\",\n  \"descripcion\": \"La caja llegó aplastada y el producto interior está roto.\"\n}"
+        }
+      }
+    },
+    {
+      "name": "2. Consultar reclamo por folio (GET)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('incluye estado, fechas y observaciones', () => {",
+              "  const b = pm.response.json();",
+              "  pm.expect(b).to.have.keys('folio','numeroGuia','tipoIncidencia','descripcion','estado','fechaCreacion','fechaActualizacion','observaciones');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/reclamos/{{folio}}" }
+    },
+    {
+      "name": "2b. Consultar folio inexistente (404)",
+      "event": [
+        {
+          "listen": "test",
+          "script": { "type": "text/javascript", "exec": ["pm.test('404 Not Found', () => pm.response.to.have.status(404));"] }
+        }
+      ],
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/reclamos/REC-20260101-000000" }
+    },
+    {
+      "name": "3. Login operador (obtiene token)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('token', pm.response.json().token);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/auth/token",
+        "body": { "mode": "raw", "raw": "{\n  \"usuario\": \"operador\",\n  \"password\": \"operador123\"\n}" }
+      }
+    },
+    {
+      "name": "4. Actualizar reclamo (PATCH, operador)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('estado actualizado y observación agregada', () => {",
+              "  const b = pm.response.json();",
+              "  pm.expect(b.estado).to.eql('En Revisión');",
+              "  pm.expect(b.observaciones.length).to.be.above(0);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+        "url": "{{baseUrl}}/api/reclamos/{{folio}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"estado\": \"En Revisión\",\n  \"observacion\": \"Iniciamos la investigación con el transportista.\"\n}"
+        }
+      }
+    },
+    {
+      "name": "4b. Actualizar sin token (401)",
+      "event": [
+        {
+          "listen": "test",
+          "script": { "type": "text/javascript", "exec": ["pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"] }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "auth": { "type": "noauth" },
+        "url": "{{baseUrl}}/api/reclamos/{{folio}}",
+        "body": { "mode": "raw", "raw": "{\n  \"observacion\": \"Sin credenciales\"\n}" }
+      }
+    }
+  ]
+}

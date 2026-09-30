@@ -1,0 +1,237 @@
+openapi: 3.0.3
+info:
+  title: API de Reclamos por Incidencias en Envíos
+  version: 1.0.0
+  description: |
+    Permite a un cliente registrar un reclamo asociado a su número de guía y consultarlo con su folio.
+    Un operador interno actualiza el estado y agrega observaciones (endpoint protegido con JWT, rol `operador`).
+
+    **Cómo autenticarse como operador:** ejecuta `POST /api/auth/token`, copia el `token` y pulsa **Authorize**.
+servers:
+  - url: /
+tags:
+  - name: Reclamos
+  - name: Autenticación
+  - name: Sistema
+paths:
+  /api/reclamos:
+    post:
+      tags: [Reclamos]
+      summary: Registrar un nuevo reclamo
+      description: Crea el reclamo con estado inicial `Recibido` y devuelve un folio único.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CrearReclamo' }
+            example:
+              numeroGuia: GU100000777
+              tipoIncidencia: Paquete Dañado
+              descripcion: La caja llegó aplastada y el producto interior está roto.
+      responses:
+        '201':
+          description: Reclamo creado
+          headers:
+            Location:
+              schema: { type: string, example: /api/reclamos/REC-20260930-1A2B3C }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reclamo' }
+        '400': { $ref: '#/components/responses/Validacion' }
+        '429': { $ref: '#/components/responses/DemasiadasPeticiones' }
+  /api/reclamos/{folio}:
+    parameters:
+      - $ref: '#/components/parameters/Folio'
+    get:
+      tags: [Reclamos]
+      summary: Consultar un reclamo por folio
+      description: Público; solo requiere el folio correcto. Las observaciones se devuelven en orden cronológico.
+      responses:
+        '200':
+          description: Reclamo encontrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reclamo' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+    patch:
+      tags: [Reclamos]
+      summary: Actualizar estado y agregar observación (operador)
+      description: |
+        Requiere JWT con rol `operador`. Agrega siempre una observación y, opcionalmente, cambia el estado.
+        Un reclamo en estado final (`Resuelto - Reembolso` o `Rechazado`) ya no puede cambiar de estado,
+        pero sí recibir observaciones.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActualizarReclamo' }
+            example:
+              estado: En Revisión
+              observacion: Iniciamos la investigación con el transportista.
+      responses:
+        '200':
+          description: Reclamo actualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reclamo' }
+        '400': { $ref: '#/components/responses/Validacion' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/Prohibido' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409':
+          description: El reclamo ya está cerrado y no puede cambiar de estado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                error: 'El reclamo ya fue cerrado con estado "Rechazado" y no puede cambiar a "En Revisión".'
+  /api/auth/token:
+    post:
+      tags: [Autenticación]
+      summary: Obtener un token JWT de operador
+      description: Credenciales configuradas con `OPERADOR_USER` y `OPERADOR_PASSWORD` (por defecto `operador` / `operador123`, solo para demo).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Login' }
+            example: { usuario: operador, password: operador123 }
+      responses:
+        '200':
+          description: Token emitido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Token' }
+        '400': { $ref: '#/components/responses/Validacion' }
+        '401':
+          description: Credenciales inválidas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Credenciales inválidas }
+        '429': { $ref: '#/components/responses/DemasiadasPeticiones' }
+  /api/health:
+    get:
+      tags: [Sistema]
+      summary: Estado del servicio
+      responses:
+        '200':
+          description: Servicio activo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  timestamp: { type: string, format: date-time }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Folio:
+      name: folio
+      in: path
+      required: true
+      description: Folio del reclamo (no distingue mayúsculas).
+      schema: { type: string, example: REC-20260902-B2C3D4 }
+  responses:
+    Validacion:
+      description: Datos inválidos
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            error: Los datos enviados no son válidos
+            detalles:
+              tipoIncidencia: 'El tipo de incidencia debe ser uno de: Paquete Dañado, Paquete Incompleto, No Recibido'
+    NoEncontrado:
+      description: El folio no existe
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            error: No encontramos un reclamo con el folio REC-20260101-000000. Verifica el folio e intenta de nuevo.
+    NoAutenticado:
+      description: Falta el token o es inválido/expirado
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: Token inválido }
+    Prohibido:
+      description: El token no tiene el rol `operador`
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: 'Esta acción requiere el rol "operador"' }
+    DemasiadasPeticiones:
+      description: Límite de peticiones excedido
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    TipoIncidencia:
+      type: string
+      enum: [Paquete Dañado, Paquete Incompleto, No Recibido]
+    EstadoReclamo:
+      type: string
+      enum: [Recibido, En Revisión, Resuelto - Reembolso, Rechazado]
+    CrearReclamo:
+      type: object
+      required: [numeroGuia, tipoIncidencia, descripcion]
+      properties:
+        numeroGuia:
+          type: string
+          pattern: '^[A-Za-z0-9-]{6,30}$'
+          description: 6 a 30 caracteres alfanuméricos.
+        tipoIncidencia: { $ref: '#/components/schemas/TipoIncidencia' }
+        descripcion: { type: string, minLength: 20, maxLength: 500 }
+    ActualizarReclamo:
+      type: object
+      required: [observacion]
+      properties:
+        estado: { $ref: '#/components/schemas/EstadoReclamo' }
+        observacion: { type: string, minLength: 1, maxLength: 1000 }
+    Observacion:
+      type: object
+      properties:
+        comentario: { type: string }
+        autor: { type: string, example: operador }
+        fecha: { type: string, format: date-time }
+    Reclamo:
+      type: object
+      properties:
+        folio: { type: string, example: REC-20260902-B2C3D4 }
+        numeroGuia: { type: string }
+        tipoIncidencia: { $ref: '#/components/schemas/TipoIncidencia' }
+        descripcion: { type: string }
+        estado: { $ref: '#/components/schemas/EstadoReclamo' }
+        fechaCreacion: { type: string, format: date-time }
+        fechaActualizacion: { type: string, format: date-time }
+        observaciones:
+          type: array
+          description: Historial cronológico (más antigua primero).
+          items: { $ref: '#/components/schemas/Observacion' }
+    Login:
+      type: object
+      required: [usuario, password]
+      properties:
+        usuario: { type: string }
+        password: { type: string, format: password }
+    Token:
+      type: object
+      properties:
+        token: { type: string }
+        tipo: { type: string, example: Bearer }
+        expiraEn: { type: string, example: 1h }
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        detalles:
+          type: object
+          additionalProperties: { type: string }
