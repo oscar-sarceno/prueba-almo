@@ -1,0 +1,61 @@
+# Arranque completo:  docker compose up --build
+#   Web:     http://localhost:8080
+#   API:     http://localhost:3000/api   ·   Swagger: http://localhost:3000/api/docs
+#
+# Los valores por defecto de JWT_SECRET y OPERADOR_PASSWORD son SOLO para demo local:
+# define los tuyos en un archivo .env (ver .env.example) para cualquier otro entorno.
+services:
+  db:
+    image: mysql:8.4
+    container_name: reclamos-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${DB_NAME:-reclamos_db}
+      MYSQL_USER: ${DB_USER:-reclamos}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-reclamos}
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build: ./backend
+    container_name: reclamos-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      TRUST_PROXY: 1
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-reclamos_db}
+      DB_USER: ${DB_USER:-reclamos}
+      DB_PASSWORD: ${DB_PASSWORD:-reclamos}
+      JWT_SECRET: ${JWT_SECRET:-demo-secret-solo-para-local-cambialo-0001}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      OPERADOR_USER: ${OPERADOR_USER:-operador}
+      OPERADOR_PASSWORD: ${OPERADOR_PASSWORD:-operador123}
+    ports:
+      - "3000:3000"
+
+  web:
+    build: ./frontend
+    container_name: reclamos-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "8080:8080"
+
+volumes:
+  db_data:
