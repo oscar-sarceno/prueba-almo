@@ -18,6 +18,8 @@ const app = createApp({
   authService,
 });
 
+app.set('trust proxy', env.TRUST_PROXY);
+
 const server = app.listen(env.PORT, () => {
   console.log(`API de reclamos escuchando en http://localhost:${env.PORT}`);
 });
