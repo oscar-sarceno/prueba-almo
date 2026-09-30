@@ -29,7 +29,31 @@ docker compose up --build
 
 Para detener y borrar los datos: `docker compose down -v`.
 
-> **Seguridad:** los valores por defecto de `JWT_SECRET` y `OPERADOR_PASSWORD` en `docker-compose.yml` son solo para demo local. Para cualquier otro entorno copia `.env.example` a `.env` y define los tuyos. Con `NODE_ENV=production` el backend se niega a arrancar si no están definidos.
+### Variables de entorno y secretos
+
+**El archivo `.env` es opcional para levantar el proyecto con Docker.** `docker-compose.yml` incluye valores de demo (usuario `operador` / contraseña `operador123`, y contraseñas de MySQL de ejemplo) para que `docker compose up --build` funcione sin configurar nada. Esos valores son públicos y **solo sirven para una demo local**.
+
+El repositorio **no contiene ningún `.env` real**: `.env` está en el `.gitignore` y lo único versionado es la plantilla [`.env.example`](.env.example), con valores de relleno. Puedes comprobarlo:
+
+```bash
+git log --all --name-only --format= | grep -E '(^|/)\.env' | sort -u   # solo debe aparecer .env.example
+```
+
+Para usar tus propios valores (recomendado fuera de una demo local):
+
+```bash
+cp .env.example .env    # Docker Compose lo lee automáticamente; git lo ignora
+```
+
+Después edita `.env` y cambia al menos `JWT_SECRET` y `OPERADOR_PASSWORD`. Puedes generar un secreto aleatorio con:
+
+```bash
+openssl rand -base64 48
+```
+
+Si necesitas compartir tus valores con otra persona, hazlo por un canal seguro (gestor de contraseñas o mensaje cifrado), nunca por el repositorio ni por correo o chat en texto plano.
+
+> **Seguridad:** con `NODE_ENV=production` el backend se niega a arrancar si `JWT_SECRET` y `OPERADOR_PASSWORD` no están definidos explícitamente, para que los valores por defecto del código nunca lleguen a producción.
 
 ## Desarrollo local (sin contenedores para la app)
 
